@@ -1,0 +1,165 @@
+<script src="https://assets.crowd.aws/crowd-html-elements.js"></script>
+
+<style>
+  .evaluation-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 20px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  .section {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    border: 1px solid #dee2e6;
+  }
+
+  .conversation-box {
+    background: white;
+    padding: 15px;
+    border-radius: 6px;
+    margin: 10px 0;
+    border-left: 4px solid #0066cc;
+  }
+
+  .response-box {
+    background: #fff8e1;
+    padding: 15px;
+    border-radius: 6px;
+    margin: 10px 0;
+    border-left: 4px solid #ff9800;
+  }
+
+  h3 {
+    color: #212529;
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+
+  h4 {
+    color: #495057;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .text-content {
+    color: #212529;
+    line-height: 1.6;
+    margin: 10px 0;
+  }
+
+  .rating-group {
+    margin: 20px 0;
+  }
+
+  .radio-group {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+
+  .radio-option {
+    flex: 0 0 auto;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 100px;
+    padding: 10px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 14px;
+    resize: vertical;
+  }
+
+  .metadata {
+    font-size: 12px;
+    color: #6c757d;
+    margin-top: 5px;
+  }
+</style>
+
+<crowd-form>
+  <div class="evaluation-container">
+
+    <!-- Question Section -->
+    <div class="section">
+      <h3>📋 Question</h3>
+      <div class="conversation-box">
+        <p class="text-content">{{ task.input.question }}</p>
+      </div>
+      <div class="metadata">
+        <strong>Category:</strong> {{ task.input.category }} |
+        <strong>ID:</strong> {{ task.input.prompt_id }}
+      </div>
+    </div>
+
+    <!-- AI Response Section -->
+    <div class="section">
+      <h3>🤖 AI-Generated Response</h3>
+      <div class="response-box">
+        <p class="text-content">{{ task.input.response }}</p>
+      </div>
+    </div>
+
+    <!-- Evaluation Section -->
+    <div class="section">
+      <h3>⭐ Your Evaluation</h3>
+
+      <!-- Overall Rating -->
+      <div class="rating-group">
+        <h4>Overall Quality Rating</h4>
+        <div class="radio-group">
+          <div class="radio-option">
+            <input type="radio" id="rating-1" name="overall_rating" value="1" required>
+            <label for="rating-1">1 - Poor</label>
+          </div>
+          <div class="radio-option">
+            <input type="radio" id="rating-2" name="overall_rating" value="2">
+            <label for="rating-2">2 - Below Average</label>
+          </div>
+          <div class="radio-option">
+            <input type="radio" id="rating-3" name="overall_rating" value="3">
+            <label for="rating-3">3 - Average</label>
+          </div>
+          <div class="radio-option">
+            <input type="radio" id="rating-4" name="overall_rating" value="4">
+            <label for="rating-4">4 - Good</label>
+          </div>
+          <div class="radio-option">
+            <input type="radio" id="rating-5" name="overall_rating" value="5">
+            <label for="rating-5">5 - Excellent</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Text Feedback -->
+      <div class="rating-group">
+        <h4>Feedback (Optional)</h4>
+        <p style="font-size: 13px; color: #6c757d; margin-bottom: 10px;">
+          Please provide any comments about the response quality, accuracy, compliance issues, or suggestions for improvement.
+        </p>
+        <textarea
+          name="feedback"
+          placeholder="Enter your feedback here..."
+        ></textarea>
+      </div>
+    </div>
+
+    <!-- Metadata (hidden fields) -->
+    <input type="hidden" name="prompt_id" value="{{ task.input.prompt_id }}">
+    <input type="hidden" name="category" value="{{ task.input.category }}">
+    <input type="hidden" name="question" value="{{ task.input.question }}">
+    <input type="hidden" name="response" value="{{ task.input.response }}">
+
+  </div>
+
+  <!-- Submit Button -->
+  <crowd-button form-action="submit" variant="primary">Submit</crowd-button>
+</crowd-form>

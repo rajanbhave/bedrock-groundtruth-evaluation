@@ -1,0 +1,37 @@
+{
+  "description": "Configuration for Bedrock model invocation in Ground Truth pre-annotation Lambda",
+  "model_id": "anthropic.claude-3-sonnet-20240229-v1:0",
+  "model_options": {
+    "claude-3-opus": "anthropic.claude-3-opus-20240229-v1:0",
+    "claude-3-sonnet": "anthropic.claude-3-sonnet-20240229-v1:0",
+    "claude-3-haiku": "anthropic.claude-3-haiku-20240307-v1:0"
+  },
+  "system_prompt": "You are a helpful retirement planning assistant. Your role is to provide general educational information about retirement planning topics.\n\nIMPORTANT GUIDELINES:\n- Do NOT provide personalized financial advice, specific investment recommendations, or tax advice\n- Always suggest consulting with a certified financial planner or advisor for personalized guidance\n- Explain general concepts, frameworks, and considerations\n- Be clear about your limitations\n- Maintain a conversational yet professional tone\n- Ensure accuracy and provide disclaimers where appropriate\n\nFocus on being educational, helpful, and compliant with financial advisory regulations.",
+  "inference_params": {
+    "max_tokens": 1000,
+    "temperature": 0.7,
+    "top_p": 0.9
+  },
+  "retry_config": {
+    "max_retries": 3,
+    "backoff_multiplier": 2
+  },
+  "caching": {
+    "enabled": true,
+    "ttl_days": 7,
+    "cache_prefix": "bedrock-cache/"
+  },
+  "notes": {
+    "usage": "Set these values as Lambda environment variables",
+    "cost_estimation": {
+      "claude-3-opus": "$15 per 1M input tokens, $75 per 1M output tokens",
+      "claude-3-sonnet": "$3 per 1M input tokens, $15 per 1M output tokens",
+      "claude-3-haiku": "$0.25 per 1M input tokens, $1.25 per 1M output tokens"
+    },
+    "recommendations": {
+      "development": "Use claude-3-haiku for cost efficiency during testing",
+      "production": "Use claude-3-sonnet for balanced quality and cost",
+      "high_quality": "Use claude-3-opus for highest quality evaluations"
+    }
+  }
+}

@@ -1,0 +1,136 @@
+{
+  "dashboardName": "GroundTruth-Bedrock-Evaluation-Dashboard",
+  "widgets": [
+    {
+      "type": "metric",
+      "properties": {
+        "metrics": [
+          ["AWS/Lambda", "Invocations", {"stat": "Sum", "label": "Pre-Annotation Invocations"}],
+          ["...", {"stat": "Sum", "label": "Post-Annotation Invocations"}]
+        ],
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "us-east-1",
+        "title": "Lambda Invocations",
+        "period": 300,
+        "yAxis": {
+          "left": {
+            "label": "Count"
+          }
+        }
+      }
+    },
+    {
+      "type": "metric",
+      "properties": {
+        "metrics": [
+          ["AWS/Lambda", "Duration", {"stat": "Average", "label": "Avg Duration"}],
+          ["...", {"stat": "Maximum", "label": "Max Duration"}]
+        ],
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "us-east-1",
+        "title": "Lambda Execution Duration",
+        "period": 300,
+        "yAxis": {
+          "left": {
+            "label": "Milliseconds"
+          }
+        }
+      }
+    },
+    {
+      "type": "metric",
+      "properties": {
+        "metrics": [
+          ["AWS/Lambda", "Errors", {"stat": "Sum", "label": "Errors", "color": "#d62728"}],
+          [".", "Throttles", {"stat": "Sum", "label": "Throttles", "color": "#ff7f0e"}]
+        ],
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "us-east-1",
+        "title": "Lambda Errors and Throttles",
+        "period": 300,
+        "yAxis": {
+          "left": {
+            "label": "Count"
+          }
+        }
+      }
+    },
+    {
+      "type": "log",
+      "properties": {
+        "query": "SOURCE '/aws/lambda/groundtruth-pre-annotation-retirement-coach'\n| fields @timestamp, @message\n| filter @message like /Bedrock invocation completed/\n| parse @message /Bedrock invocation completed in (?<duration>[0-9.]+) seconds/\n| stats avg(duration) as avg_duration, max(duration) as max_duration, min(duration) as min_duration by bin(5m)",
+        "region": "us-east-1",
+        "stacked": false,
+        "title": "Bedrock Invocation Latency",
+        "view": "timeSeries"
+      }
+    },
+    {
+      "type": "log",
+      "properties": {
+        "query": "SOURCE '/aws/lambda/groundtruth-pre-annotation-retirement-coach'\n| fields @timestamp, @message\n| filter @message like /Cache hit/\n| stats count() as cache_hits by bin(5m)",
+        "region": "us-east-1",
+        "title": "Cache Hit Rate",
+        "view": "timeSeries"
+      }
+    },
+    {
+      "type": "log",
+      "properties": {
+        "query": "SOURCE '/aws/lambda/groundtruth-pre-annotation-retirement-coach'\n| fields @timestamp, @message\n| filter @message like /Error/\n| stats count() by bin(5m) as error_count",
+        "region": "us-east-1",
+        "title": "Error Rate Over Time",
+        "view": "timeSeries"
+      }
+    },
+    {
+      "type": "metric",
+      "properties": {
+        "metrics": [
+          ["AWS/SageMaker/LabelingJob", "ActiveWorkerCount", {"stat": "Average"}]
+        ],
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "us-east-1",
+        "title": "Active Workers",
+        "period": 300
+      }
+    },
+    {
+      "type": "metric",
+      "properties": {
+        "metrics": [
+          ["AWS/SageMaker/LabelingJob", "DataObjectsLabeled", {"stat": "Sum"}],
+          [".", "DataObjectsUnlabeled", {"stat": "Sum"}]
+        ],
+        "view": "timeSeries",
+        "stacked": true,
+        "region": "us-east-1",
+        "title": "Labeling Progress",
+        "period": 300
+      }
+    },
+    {
+      "type": "log",
+      "properties": {
+        "query": "SOURCE '/aws/lambda/groundtruth-post-annotation-retirement-coach'\n| fields @timestamp, @message\n| filter @message like /Successfully stored evaluation data/\n| stats count() as stored_evaluations by bin(5m)",
+        "region": "us-east-1",
+        "title": "Evaluations Stored in Aurora",
+        "view": "timeSeries"
+      }
+    },
+    {
+      "type": "log",
+      "properties": {
+        "query": "SOURCE '/aws/lambda/groundtruth-pre-annotation-retirement-coach'\n| fields @timestamp, @message\n| filter @message like /Error invoking Bedrock/ or @message like /Throttled by Bedrock/\n| stats count() as bedrock_errors by bin(5m)",
+        "region": "us-east-1",
+        "title": "Bedrock API Errors",
+        "view": "timeSeries"
+      }
+    }
+  ],
+  "periodOverride": "inherit"
+}

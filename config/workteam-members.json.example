@@ -1,0 +1,9 @@
+[
+  {
+    "CognitoMemberDefinition": {
+      "UserPool": "YOUR_USER_POOL_ID",
+      "UserGroup": "evaluators",
+      "ClientId": "YOUR_CLIENT_ID"
+    }
+  }
+]
