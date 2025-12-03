@@ -2,59 +2,72 @@
 
 This project implements a complete custom workflow for human evaluation of Amazon Bedrock model responses using SageMaker Ground Truth, with structured feedback storage in Aurora PostgreSQL.
 
-## Bedrock Integration
+## 🎯 Two Evaluation Approaches
 
-**Generate responses automatically during evaluation!** The pre-annotation Lambda now invokes Bedrock models on-demand, eliminating the need to pre-generate responses.
+This system supports **two distinct evaluation workflows** to accommodate different use cases:
 
-**Key Features:**
-- On-the-fly vs pre-generated mode comparison
-- Bedrock model configuration (Claude 3 Sonnet)
-- S3 caching for cost optimization
-- Comprehensive error handling and retry logic
-- Performance benchmarking and monitoring
+### 📄 Static Version (Pre-defined Questions)
+- **Best for**: Consistent evaluation of specific question sets, benchmarking, A/B testing
+- **How it works**: Questions are pre-defined in the manifest, AI responses are generated before workers see them
+- **Worker experience**: Workers see questions already populated with AI responses, focus on evaluation
+- **Response generation**: Pre-annotation Lambda invokes Bedrock before task display
+- **Use case**: "Evaluate how the AI handles these 50 specific retirement planning questions"
+
+### ⚡ Dynamic Version (Worker-generated Questions)
+- **Best for**: Exploratory testing, edge case discovery, realistic user scenarios
+- **How it works**: Workers input their own questions, AI responds in real-time via API Gateway
+- **Worker experience**: Workers type questions, click "Generate Response", then evaluate
+- **Response generation**: Browser JavaScript calls API Gateway → Lambda → Bedrock (10-15 seconds)
+- **Use case**: "Let evaluators explore how the AI handles unexpected pension questions"
 
 ## 📋 Overview
 
 This solution enables structured human evaluation of AI-generated retirement planning advice with:
 
 - **Custom HTML UI** for rich evaluation experience with multiple rating dimensions
-- **On-the-fly Bedrock invocation** (NEW) or pre-generated responses
-- **Pre/Post-annotation Lambda functions** for Bedrock integration, data processing, and Aurora storage
+- **Two evaluation modes**: Static (pre-defined) and Dynamic (worker-generated questions)
+- **Real-time and pre-generated response options** using Amazon Bedrock
+- **Pre/Post-annotation Lambda functions** for data processing and Aurora storage
+- **API Gateway integration** for dynamic real-time Bedrock invocation
 - **Structured feedback storage** in Aurora PostgreSQL with comprehensive metrics
 - **S3 caching** to optimize costs and reduce latency
 - **Comprehensive evaluation metrics** including quality ratings, compliance checks, and detailed feedback
 
 ## 🏗️ Architecture
 
-### On-the-Fly Mode (NEW - Recommended)
+### Static Version Architecture (Pre-defined Questions)
 ```
-┌─────────────────┐
-│  Question-Only  │ (JSONL in S3)
-│  Dataset        │ (No responses needed!)
-└────────┬────────┘
+┌─────────────────────────┐
+│  Static Manifest        │ (JSONL in S3)
+│  {source, category,     │ Questions pre-defined
+│   question}             │
+└────────┬────────────────┘
          │
          ▼
-┌────────────────────────────────────────────────────────┐
-│        SageMaker Ground Truth Labeling Job             │
-│  ┌──────────────────────────────────────────────────┐  │
-│  │  Pre-Annotation Lambda (Enhanced)                │  │
-│  │  • Invokes Bedrock API                           │  │
-│  │  • S3 caching for duplicates                     │  │
-│  │  • Retry logic & error handling                  │  │
-│  └──────────────┬───────────────────────────────────┘  │
-│                 │                                       │
-│                 ▼                                       │
-│  ┌──────────────────────────────────────────────────┐  │
-│  │  Custom HTML Template                            │  │
-│  │  (Worker UI with ratings & feedback)             │  │
-│  └──────────────┬───────────────────────────────────┘  │
-│                 │                                       │
-│                 ▼                                       │
-│  ┌──────────────────────────────────────────────────┐  │
-│  │  Post-Annotation Lambda                          │  │
-│  │  (Consolidate + Store in Aurora)                 │  │
-│  └──────────────┬───────────────────────────────────┘  │
-└─────────────────┼─────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│            SageMaker Ground Truth Labeling Job               │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │  Pre-Annotation Lambda                                 │  │
+│  │  • Receives question from manifest                     │  │
+│  │  • Invokes Bedrock API                                 │  │
+│  │  • S3 caching for duplicates                           │  │
+│  │  • Returns question + AI response to template          │  │
+│  └──────────────┬─────────────────────────────────────────┘  │
+│                 │                                             │
+│                 ▼                                             │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │  Static HTML Template                                  │  │
+│  │  • Question already populated                          │  │
+│  │  • AI response already generated                       │  │
+│  │  • Worker evaluates and rates                          │  │
+│  └──────────────┬─────────────────────────────────────────┘  │
+│                 │                                             │
+│                 ▼                                             │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │  Post-Annotation Lambda                                │  │
+│  │  (Consolidate + Store in Aurora)                       │  │
+│  └──────────────┬─────────────────────────────────────────┘  │
+└─────────────────┼───────────────────────────────────────────┘
                   │
          ┌────────┴────────┐
          │                 │
@@ -65,40 +78,135 @@ This solution enables structured human evaluation of AI-generated retirement pla
   └─────────────┘   └────────────────┘
 ```
 
-### Pre-Generated Mode
-For cost optimization or when consistency is required, responses can be pre-generated using the batch generation script
+### Dynamic Version Architecture (Worker-generated Questions)
+```
+┌─────────────────────────┐
+│  Dynamic Manifest       │ (JSONL in S3)
+│  {source: "task-001"}   │ Just task IDs
+└─────────────────────────┘
+         │
+         ▼
+┌──────────────────────────────────────────────────────────────┐
+│            SageMaker Ground Truth Labeling Job               │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │  Dynamic HTML Template                                 │  │
+│  │  ┌──────────────────────────────────────────────────┐  │  │
+│  │  │ 1. Worker enters question in text field         │  │  │
+│  │  │ 2. Clicks "Generate AI Response" button          │  │  │
+│  │  │ 3. JavaScript calls API Gateway                  │  │  │
+│  │  └──────────────────┬───────────────────────────────┘  │  │
+│  └───────────────────────┼────────────────────────────────┘  │
+│                          │                                    │
+│                          │ HTTPS Request                      │
+│                          ▼                                    │
+│       ┌──────────────────────────────────────────────┐       │
+│       │        API Gateway                           │       │
+│       │  POST /generate-response                     │       │
+│       └──────────────────┬───────────────────────────┘       │
+│                          │                                    │
+│                          ▼                                    │
+│       ┌──────────────────────────────────────────────┐       │
+│       │   Bedrock API Lambda                         │       │
+│       │   • Validates question                       │       │
+│       │   • Checks S3 cache                          │       │
+│       │   • Invokes Bedrock (10-15s)                 │       │
+│       │   • Returns response + metadata              │       │
+│       └──────────────────┬───────────────────────────┘       │
+│                          │                                    │
+│                          │ JSON Response                      │
+│                          ▼                                    │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │  Dynamic HTML Template (continued)                     │  │
+│  │  4. Displays AI response                               │  │
+│  │  5. Worker evaluates and rates                         │  │
+│  │  6. Submits evaluation                                 │  │
+│  └──────────────┬─────────────────────────────────────────┘  │
+│                 │                                             │
+│                 ▼                                             │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │  Post-Annotation Lambda (Shared)                       │  │
+│  │  (Consolidate + Store in Aurora)                       │  │
+│  └──────────────┬─────────────────────────────────────────┘  │
+└─────────────────┼───────────────────────────────────────────┘
+                  │
+         ┌────────┴────────┐
+         │                 │
+         ▼                 ▼
+  ┌─────────────┐   ┌────────────────┐
+  │   Bedrock   │   │    Aurora      │
+  │   Models    │   │  PostgreSQL    │
+  └─────────────┘   └────────────────┘
+```
+
+### Key Architectural Differences
+
+| Component | Static Version | Dynamic Version |
+|-----------|----------------|-----------------|
+| **Manifest** | Contains questions | Just task IDs |
+| **Pre-annotation Lambda** | ✅ Generates responses | ❌ Not used |
+| **API Gateway** | ❌ Not used | ✅ Exposes Bedrock endpoint |
+| **Bedrock API Lambda** | ❌ Not used | ✅ Handles real-time calls |
+| **Response timing** | Before worker sees task | After worker enters question |
+| **Worker input** | No question entry | Question text field |
+| **Network calls** | Server-side only | Browser → API Gateway |
+| **Post-annotation Lambda** | ✅ Shared | ✅ Shared |
 
 ## 📁 Project Structure
 
 ```
 bedrock-groundtruth-evaluation/
-├── README.md                                      # This file
+├── README.md                                            # This file
+├── VALIDATION_REPORT.md                                 # Dynamic version validation report
 ├── templates/
-│   └── retirement_coach_evaluation_template.html  # Custom HTML UI template
+│   ├── retirement_coach_evaluation_template.html        # Static version HTML template
+│   └── retirement_coach_evaluation_template_dynamic.html # Dynamic version HTML template (NEW)
 ├── lambda/
-│   ├── pre_annotation_lambda.py                   # Enhanced with Bedrock invocation (UPDATED)
-│   ├── post_annotation_lambda.py                  # Post-processing + Aurora integration
-│   ├── requirements.txt                           # Python dependencies
-│   ├── package_lambda.sh                          # Original packaging script
-│   └── deploy_lambda.sh                           # Enhanced deployment script (NEW)
+│   ├── pre_annotation_lambda.py                         # Pre-annotation Lambda (Static version)
+│   ├── post_annotation_lambda.py                        # Post-processing + Aurora (Shared)
+│   ├── bedrock_api_lambda.py                            # API Gateway Lambda (Dynamic version - NEW)
+│   ├── requirements.txt                                 # Python dependencies
+│   ├── package_lambda.sh                                # Lambda packaging script
+│   └── deploy_lambda.sh                                 # Enhanced deployment script
 ├── config/
-│   ├── bedrock_config.json                        # Bedrock model configuration (NEW)
-│   ├── create_groundtruth_job.py                  # Job creation script
-│   ├── aurora_schema.sql                          # Database schema
-│   ├── test_bedrock_integration.py                # Bedrock integration test suite (NEW)
-│   ├── batch_generate_responses.py                # Batch response generation (NEW)
-│   ├── example_usage.py                           # Usage examples
-│   └── cloudwatch_dashboard.json                  # CloudWatch monitoring dashboard (NEW)
+│   ├── bedrock_config.json                              # Bedrock model configuration
+│   ├── create_groundtruth_job.py                        # Static version job creation
+│   ├── create_groundtruth_job_dynamic.py                # Dynamic version job creation (NEW)
+│   ├── setup_api_gateway_dynamic.sh                     # API Gateway deployment script (NEW)
+│   ├── aurora_schema.sql                                # Database schema
+│   ├── batch_generate_responses.py                      # Batch response generation
+│   ├── create_workteam.sh                               # Workteam creation script
+│   ├── workteam-members.json                            # Workteam member configuration
+│   └── cloudwatch_dashboard.json                        # CloudWatch monitoring dashboard
 ├── datasets/
-│   ├── sample_prompts.jsonl                       # Sample dataset with responses
-│   └── sample_prompts_questions_only.jsonl        # Questions-only dataset (NEW)
+│   ├── sample_prompts_questions_only.jsonl              # Static version manifest (with questions)
+│   └── dynamic_tasks.jsonl                              # Dynamic version manifest (task IDs only - NEW)
 └── iam-policies/
-    ├── groundtruth-execution-role-policy.json     # Ground Truth IAM policy
+    ├── groundtruth-execution-role-policy.json           # Ground Truth IAM policy
     ├── groundtruth-execution-role-trust-policy.json
-    ├── lambda-pre-annotation-policy.json          # With Bedrock permissions (UPDATED)
-    ├── lambda-post-annotation-policy.json
+    ├── lambda-pre-annotation-policy.json                # Static version Lambda policy
+    ├── lambda-post-annotation-policy.json               # Shared post-annotation policy
     └── lambda-execution-role-trust-policy.json
 ```
+
+### Version-Specific Files
+
+**Static Version Files:**
+- `templates/retirement_coach_evaluation_template.html`
+- `lambda/pre_annotation_lambda.py`
+- `config/create_groundtruth_job.py`
+- `datasets/sample_prompts_questions_only.jsonl`
+
+**Dynamic Version Files:**
+- `templates/retirement_coach_evaluation_template_dynamic.html`
+- `lambda/bedrock_api_lambda.py`
+- `config/create_groundtruth_job_dynamic.py`
+- `config/setup_api_gateway_dynamic.sh`
+- `datasets/dynamic_tasks.jsonl`
+
+**Shared Files:**
+- `lambda/post_annotation_lambda.py` (both versions use same Aurora storage)
+- `config/aurora_schema.sql` (database schema for both)
+- All IAM policies and configuration files
 
 ## 🚀 Setup Guide
 
@@ -300,35 +408,127 @@ export WORKTEAM_ARN=$(aws sagemaker describe-workteam --workteam-name retirement
 echo "Workteam ARN: ${WORKTEAM_ARN}"
 ```
 
-### Step 8: Upload Dataset and Template
+### Step 8: Choose Your Evaluation Version
+
+At this point, choose which version(s) to deploy:
+
+---
+
+## 📄 Static Version Deployment (Pre-defined Questions)
+
+### Step 8-Static: Upload Dataset and Template
 
 ```bash
-# Upload sample dataset
-aws s3 cp datasets/sample_prompts_questions_only.jsonl s3://${BUCKET_NAME}/groundtruth/input/prompts.jsonl
+# Upload static dataset (with questions)
+aws s3 cp datasets/sample_prompts_questions_only.jsonl \
+    s3://${BUCKET_NAME}/uk_pension_data/groundtruth/input/prompts.jsonl
 
-# Upload HTML template
-aws s3 cp templates/retirement_coach_evaluation_template.html s3://${BUCKET_NAME}/groundtruth/templates/template.html
+# Upload static HTML template
+aws s3 cp templates/retirement_coach_evaluation_template.html \
+    s3://${BUCKET_NAME}/uk_pension_data/groundtruth/templates/template.html
 ```
 
-### Step 9: Create Ground Truth Labeling Job
+### Step 9-Static: Create Static Labeling Job
 
 ```bash
-# Using the Python script
+# Create static labeling job with pre-defined questions
 python config/create_groundtruth_job.py \
-    --job-name retirement-coach-eval-$(date +%Y%m%d-%H%M%S) \
-    --input-manifest s3://${BUCKET_NAME}/groundtruth/input/prompts.jsonl \
-    --output-path s3://${BUCKET_NAME}/groundtruth/output/ \
+    --job-name retirement-coach-static-$(date +%Y%m%d-%H%M%S) \
+    --input-manifest s3://${BUCKET_NAME}/uk_pension_data/groundtruth/input/prompts.jsonl \
+    --output-path s3://${BUCKET_NAME}/uk_pension_data/groundtruth/output/ \
     --template-file templates/retirement_coach_evaluation_template.html \
     --template-s3-bucket ${BUCKET_NAME} \
     --role-arn ${GT_ROLE_ARN} \
     --workteam-arn ${WORKTEAM_ARN} \
     --pre-lambda-arn ${PRE_LAMBDA_ARN} \
     --post-lambda-arn ${POST_LAMBDA_ARN} \
-    --workers-per-object 2
+    --workers-per-object 1
 
 # Monitor job status
-aws sagemaker describe-labeling-job --labeling-job-name retirement-coach-eval-20251120-213209
+aws sagemaker describe-labeling-job --labeling-job-name retirement-coach-static-YYYYMMDD-HHMMSS
 ```
+
+---
+
+## ⚡ Dynamic Version Deployment (Worker-generated Questions)
+
+### Step 8-Dynamic: Deploy API Gateway Infrastructure
+
+```bash
+# Deploy API Gateway + Lambda for dynamic Bedrock invocation
+./config/setup_api_gateway_dynamic.sh
+
+# This script will:
+# 1. Create IAM role for Bedrock API Lambda
+# 2. Deploy bedrock-api-dynamic-evaluation Lambda
+# 3. Create API Gateway with CORS support
+# 4. Output the API Gateway endpoint URL
+
+# Save the API endpoint URL shown at the end - you'll need it for the next step
+export API_ENDPOINT="<your-api-gateway-url>"  # Example: https://abc123.execute-api.us-east-1.amazonaws.com/prod/generate-response
+```
+
+### Step 9-Dynamic: Update Template with API Endpoint
+
+```bash
+# Update the dynamic template with your API Gateway endpoint
+# Edit templates/retirement_coach_evaluation_template_dynamic.html
+# Find line with: const BEDROCK_API_ENDPOINT = 'https://...'
+# Replace with your actual API endpoint URL from Step 8-Dynamic
+
+# Or use sed:
+sed -i '' "s|https://.*amazonaws.com/prod/generate-response|${API_ENDPOINT}|" \
+    templates/retirement_coach_evaluation_template_dynamic.html
+```
+
+### Step 10-Dynamic: Upload Dynamic Files
+
+```bash
+# Upload dynamic dataset (just task IDs)
+aws s3 cp datasets/dynamic_tasks.jsonl \
+    s3://${BUCKET_NAME}/uk_pension_data/groundtruth/input/dynamic_tasks.jsonl
+
+# Upload dynamic HTML template (with API endpoint configured)
+aws s3 cp templates/retirement_coach_evaluation_template_dynamic.html \
+    s3://${BUCKET_NAME}/uk_pension_data/groundtruth/templates/template_dynamic.html
+```
+
+### Step 11-Dynamic: Create Dynamic Labeling Job
+
+```bash
+# Create dynamic labeling job for worker-generated questions
+python config/create_groundtruth_job_dynamic.py \
+    --job-name retirement-coach-dynamic-$(date +%Y%m%d-%H%M%S) \
+    --input-manifest s3://${BUCKET_NAME}/uk_pension_data/groundtruth/input/dynamic_tasks.jsonl \
+    --output-path s3://${BUCKET_NAME}/uk_pension_data/groundtruth/output/ \
+    --template-s3-uri s3://${BUCKET_NAME}/uk_pension_data/groundtruth/templates/template_dynamic.html \
+    --role-arn ${GT_ROLE_ARN} \
+    --workteam-arn ${WORKTEAM_ARN} \
+    --post-lambda-arn ${POST_LAMBDA_ARN}
+
+# Note: No pre-lambda-arn needed for dynamic version!
+
+# Monitor job status
+aws sagemaker describe-labeling-job --labeling-job-name retirement-coach-dynamic-YYYYMMDD-HHMMSS
+```
+
+---
+
+## 🔍 Accessing the Worker Portal
+
+Both versions use the same worker portal:
+
+```bash
+# Get worker portal URL
+aws sagemaker describe-workteam --workteam-name retirement-coach-evaluators \
+    --query 'Workteam.SubDomain' --output text
+
+# Example output: https://abc123.labeling.us-east-1.sagemaker.aws
+```
+
+Workers will see:
+- **Static tasks**: Questions already populated, AI responses pre-generated
+- **Dynamic tasks**: Empty question field, "Generate AI Response" button
 
 ## 📊 Custom HTML Template Features
 

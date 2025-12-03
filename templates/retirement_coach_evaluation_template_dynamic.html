@@ -1,0 +1,541 @@
+<script src="https://assets.crowd.aws/crowd-html-elements.js"></script>
+
+<style>
+  .evaluation-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  .section {
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border-left: 4px solid #007bff;
+  }
+
+  .question-input-section {
+    border-left-color: #17a2b8;
+    background: linear-gradient(135deg, #e8f4f8 0%, #f8f9fa 100%);
+  }
+
+  .response-section {
+    border-left-color: #28a745;
+    background: linear-gradient(135deg, #f0f8e8 0%, #f8f9fa 100%);
+    display: none;
+  }
+
+  .rating-section {
+    border-left-color: #ffc107;
+    background: linear-gradient(135deg, #fff3cd 0%, #f8f9fa 100%);
+    display: none;
+  }
+
+  h3 {
+    margin-top: 0;
+    margin-bottom: 16px;
+    color: #212529;
+    font-size: 20px;
+    font-weight: 600;
+  }
+
+  h4 {
+    margin-top: 20px;
+    margin-bottom: 12px;
+    color: #495057;
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .question-input {
+    width: 100%;
+    min-height: 120px;
+    padding: 14px;
+    border: 2px solid #ced4da;
+    border-radius: 6px;
+    font-size: 15px;
+    font-family: inherit;
+    resize: vertical;
+    transition: border-color 0.2s;
+  }
+
+  .question-input:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+  }
+
+  .generate-btn {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    color: white;
+    border: none;
+    padding: 12px 32px;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 12px;
+    transition: all 0.2s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+
+  .generate-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    transform: translateY(-1px);
+  }
+
+  .generate-btn:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  .response-text {
+    background: white;
+    padding: 20px;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    font-size: 15px;
+    color: #212529;
+  }
+
+  .loading {
+    display: none;
+    text-align: center;
+    padding: 24px;
+    color: #007bff;
+  }
+
+  .loading-spinner {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 12px;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .error {
+    display: none;
+    background: #f8d7da;
+    color: #721c24;
+    padding: 14px;
+    border-radius: 6px;
+    border: 1px solid #f5c6cb;
+    margin-top: 12px;
+    font-size: 14px;
+  }
+
+  .info-text {
+    color: #6c757d;
+    font-size: 14px;
+    margin-top: 12px;
+    line-height: 1.5;
+  }
+
+  .success-badge {
+    display: inline-block;
+    background: #28a745;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-left: 8px;
+  }
+
+  .cached-badge {
+    display: inline-block;
+    background: #17a2b8;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-left: 8px;
+  }
+
+  .example-questions {
+    background: #e7f3ff;
+    border: 1px solid #b8d4ff;
+    border-radius: 6px;
+    padding: 12px;
+    margin-top: 12px;
+    font-size: 13px;
+  }
+
+  .example-questions strong {
+    color: #004085;
+  }
+
+  .example-questions ul {
+    margin: 8px 0 0 0;
+    padding-left: 20px;
+  }
+
+  .example-questions li {
+    margin: 4px 0;
+    cursor: pointer;
+    color: #0056b3;
+  }
+
+  .example-questions li:hover {
+    text-decoration: underline;
+  }
+
+  .rating-grid {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  crowd-radio-button {
+    margin: 8px 0;
+  }
+
+  .char-counter {
+    text-align: right;
+    font-size: 12px;
+    color: #6c757d;
+    margin-top: 4px;
+  }
+
+  .char-counter.warning {
+    color: #ffc107;
+  }
+
+  .char-counter.error {
+    color: #dc3545;
+  }
+</style>
+
+<crowd-form>
+  <div class="evaluation-container">
+
+    <!-- Section 1: Question Input -->
+    <div class="section question-input-section">
+      <h3>📝 Ask Your Question</h3>
+      <p>Enter your own question about retirement planning, pensions, or financial advice:</p>
+
+      <textarea
+        id="questionInput"
+        class="question-input"
+        placeholder="Example: I'm 35 years old and currently contributing 5% of my salary to my workplace pension. My employer matches up to 5%. Should I increase my contribution, and if so, by how much?"
+        required
+        maxlength="2000"
+      ></textarea>
+
+      <div class="char-counter" id="charCounter">0 / 2000 characters</div>
+
+      <button type="button" class="generate-btn" id="generateBtn" onclick="generateResponse()">
+        🤖 Generate AI Response
+      </button>
+
+      <div class="example-questions">
+        <strong>💡 Example questions you can try:</strong>
+        <ul>
+          <li onclick="useExample(0)">I'm 40 and have £50,000 in my pension. Am I on track for retirement at 65?</li>
+          <li onclick="useExample(1)">What's the difference between a defined benefit and defined contribution pension?</li>
+          <li onclick="useExample(2)">Should I consolidate my old workplace pensions into one pot?</li>
+          <li onclick="useExample(3)">How does the State Pension work and when can I claim it?</li>
+        </ul>
+      </div>
+
+      <div class="loading" id="loading">
+        <div class="loading-spinner"></div>
+        <p><strong>Generating AI response...</strong></p>
+        <p class="info-text">This may take 5-15 seconds</p>
+      </div>
+
+      <div class="error" id="error"></div>
+
+      <p class="info-text">
+        ℹ️ Once generated, you'll evaluate the AI's response for quality, accuracy, and helpfulness.
+      </p>
+    </div>
+
+    <!-- Section 2: AI Response Display -->
+    <div class="section response-section" id="responseSection">
+      <h3>🤖 AI-Generated Response<span id="cachedBadge"></span></h3>
+      <div class="response-text" id="responseText"></div>
+      <p class="info-text" style="margin-top: 12px;">
+        ⏱️ Generated at: <span id="responseTimestamp"></span>
+      </p>
+    </div>
+
+    <!-- Section 3: Evaluation Form -->
+    <div class="section rating-section" id="ratingSection">
+      <h3>⭐ Your Evaluation</h3>
+
+      <h4>Overall Quality Rating</h4>
+      <p class="info-text">Rate the quality of the AI's response:</p>
+      <crowd-radio-group>
+        <crowd-radio-button name="overall_rating" value="1">⭐ 1 - Poor (incorrect, unhelpful, or inappropriate)</crowd-radio-button>
+        <crowd-radio-button name="overall_rating" value="2">⭐⭐ 2 - Below Average (some issues with accuracy or helpfulness)</crowd-radio-button>
+        <crowd-radio-button name="overall_rating" value="3">⭐⭐⭐ 3 - Average (acceptable but could be better)</crowd-radio-button>
+        <crowd-radio-button name="overall_rating" value="4">⭐⭐⭐⭐ 4 - Good (helpful and mostly accurate)</crowd-radio-button>
+        <crowd-radio-button name="overall_rating" value="5">⭐⭐⭐⭐⭐ 5 - Excellent (highly accurate, comprehensive, and helpful)</crowd-radio-button>
+      </crowd-radio-group>
+
+      <h4>Detailed Feedback (Optional but Recommended)</h4>
+      <p class="info-text">What did you like or dislike? What could be improved?</p>
+      <crowd-text-area
+        name="feedback"
+        placeholder="Example: The response was clear and easy to understand, but it could have mentioned tax implications of increasing pension contributions. It also should have included a disclaimer about seeking personalized financial advice."
+        rows="5"
+      ></crowd-text-area>
+
+      <!-- Hidden fields to store question and response -->
+      <crowd-input name="question" id="questionHidden" type="hidden"></crowd-input>
+      <crowd-input name="response" id="responseHidden" type="hidden"></crowd-input>
+      <crowd-input name="model_id" id="modelIdHidden" type="hidden"></crowd-input>
+      <crowd-input name="timestamp" id="timestampHidden" type="hidden"></crowd-input>
+      <crowd-input name="cached" id="cachedHidden" type="hidden"></crowd-input>
+      <crowd-input name="prompt_id" value="{{ task.input.source }}" type="hidden"></crowd-input>
+      <crowd-input name="category" value="Dynamic" type="hidden"></crowd-input>
+    </div>
+
+  </div>
+
+  <short-instructions>
+    Ask your own question, get an AI response, then evaluate its quality.
+  </short-instructions>
+
+  <full-instructions>
+    <h2>Dynamic Question Evaluation</h2>
+
+    <h3>Overview</h3>
+    <p>In this task, you'll ask your own question about retirement planning or pensions, receive an AI-generated response, and then evaluate the quality of that response.</p>
+
+    <h3>Step-by-Step Instructions</h3>
+    <ol>
+      <li>
+        <strong>Ask Your Question:</strong>
+        <ul>
+          <li>Type a question about UK retirement planning, pensions, or financial advice</li>
+          <li>Be specific and clear in your question</li>
+          <li>You can use the example questions for inspiration</li>
+          <li>Questions should be at least 10 characters and under 2000 characters</li>
+        </ul>
+      </li>
+      <li>
+        <strong>Generate AI Response:</strong>
+        <ul>
+          <li>Click the "Generate AI Response" button</li>
+          <li>Wait 5-15 seconds for the AI to generate a response</li>
+          <li>The response will appear automatically</li>
+        </ul>
+      </li>
+      <li>
+        <strong>Review the Response:</strong>
+        <ul>
+          <li>Read the AI's answer carefully</li>
+          <li>Consider accuracy, helpfulness, clarity, and completeness</li>
+          <li>Note any strengths or weaknesses</li>
+        </ul>
+      </li>
+      <li>
+        <strong>Rate the Quality:</strong>
+        <ul>
+          <li><strong>5 - Excellent:</strong> Highly accurate, comprehensive, clear, and helpful</li>
+          <li><strong>4 - Good:</strong> Accurate and helpful with minor room for improvement</li>
+          <li><strong>3 - Average:</strong> Acceptable but has noticeable issues or gaps</li>
+          <li><strong>2 - Below Average:</strong> Some significant issues with accuracy or helpfulness</li>
+          <li><strong>1 - Poor:</strong> Incorrect, unhelpful, inappropriate, or misleading</li>
+        </ul>
+      </li>
+      <li>
+        <strong>Provide Feedback:</strong>
+        <ul>
+          <li>Explain your rating with specific examples</li>
+          <li>What was good about the response?</li>
+          <li>What could be improved?</li>
+          <li>Were there any inaccuracies or missing information?</li>
+        </ul>
+      </li>
+      <li>
+        <strong>Submit:</strong>
+        <ul>
+          <li>Click the Submit button to complete the task</li>
+          <li>You cannot submit until you've generated a response and provided a rating</li>
+        </ul>
+      </li>
+    </ol>
+
+    <h3>What to Evaluate</h3>
+    <ul>
+      <li><strong>Accuracy:</strong> Is the information correct and up-to-date for UK regulations?</li>
+      <li><strong>Relevance:</strong> Does it directly answer the question asked?</li>
+      <li><strong>Completeness:</strong> Does it cover all important aspects of the question?</li>
+      <li><strong>Clarity:</strong> Is it easy to understand for someone without financial expertise?</li>
+      <li><strong>Disclaimers:</strong> Does it include appropriate warnings about seeking professional advice when needed?</li>
+      <li><strong>Helpfulness:</strong> Would this response actually help someone making financial decisions?</li>
+    </ul>
+
+    <h3>Important Notes</h3>
+    <ul>
+      <li>You can regenerate a response if needed by clicking the button again</li>
+      <li>Cached responses may appear faster (indicated by a badge)</li>
+      <li>Be honest in your ratings - we want to improve AI quality</li>
+      <li>Your feedback is valuable - please be specific</li>
+    </ul>
+  </full-instructions>
+</crowd-form>
+
+<script>
+  // IMPORTANT: Replace this URL with your actual API Gateway endpoint after deployment
+  const BEDROCK_API_ENDPOINT = 'https://tpvsittutj.execute-api.us-east-1.amazonaws.com/prod/generate-response';
+
+  // Example questions
+  const EXAMPLE_QUESTIONS = [
+    "I'm 40 and have £50,000 in my pension. Am I on track for retirement at 65?",
+    "What's the difference between a defined benefit and defined contribution pension?",
+    "Should I consolidate my old workplace pensions into one pot?",
+    "How does the State Pension work and when can I claim it?"
+  ];
+
+  // Character counter
+  document.addEventListener('DOMContentLoaded', function() {
+    const questionInput = document.getElementById('questionInput');
+    const charCounter = document.getElementById('charCounter');
+
+    questionInput.addEventListener('input', function() {
+      const length = this.value.length;
+      charCounter.textContent = length + ' / 2000 characters';
+
+      if (length > 1800) {
+        charCounter.className = 'char-counter error';
+      } else if (length > 1500) {
+        charCounter.className = 'char-counter warning';
+      } else {
+        charCounter.className = 'char-counter';
+      }
+    });
+  });
+
+  // Use example question
+  function useExample(index) {
+    document.getElementById('questionInput').value = EXAMPLE_QUESTIONS[index];
+    document.getElementById('questionInput').dispatchEvent(new Event('input'));
+  }
+
+  // Generate AI response
+  async function generateResponse() {
+    const questionInput = document.getElementById('questionInput');
+    const question = questionInput.value.trim();
+
+    // Validate
+    if (!question) {
+      showError('Please enter a question first.');
+      return;
+    }
+
+    if (question.length < 10) {
+      showError('Question must be at least 10 characters long.');
+      return;
+    }
+
+    if (question.length > 2000) {
+      showError('Question must be less than 2000 characters.');
+      return;
+    }
+
+    // Show loading state
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('error').style.display = 'none';
+    document.getElementById('generateBtn').disabled = true;
+    document.getElementById('responseSection').style.display = 'none';
+    document.getElementById('ratingSection').style.display = 'none';
+
+    try {
+      // Call API Gateway
+      const response = await fetch(BEDROCK_API_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question: question,
+          use_cache: true
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      // Display response
+      document.getElementById('responseText').textContent = data.response;
+      document.getElementById('responseTimestamp').textContent = new Date(data.timestamp).toLocaleString();
+
+      // Show cached badge if applicable
+      if (data.cached) {
+        document.getElementById('cachedBadge').innerHTML = '<span class="cached-badge">CACHED</span>';
+      } else {
+        document.getElementById('cachedBadge').innerHTML = '<span class="success-badge">NEW</span>';
+      }
+
+      // Show sections
+      document.getElementById('responseSection').style.display = 'block';
+      document.getElementById('ratingSection').style.display = 'block';
+
+      // Store in hidden fields
+      document.getElementById('questionHidden').value = question;
+      document.getElementById('responseHidden').value = data.response;
+      document.getElementById('modelIdHidden').value = data.model_id || 'unknown';
+      document.getElementById('timestampHidden').value = data.timestamp;
+      document.getElementById('cachedHidden').value = data.cached ? 'true' : 'false';
+
+      // Hide loading
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('generateBtn').disabled = false;
+      document.getElementById('generateBtn').textContent = '🔄 Regenerate Response';
+
+      // Scroll to response
+      document.getElementById('responseSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    } catch (error) {
+      console.error('Error generating response:', error);
+      showError('Failed to generate response: ' + error.message + '. Please check that the API Gateway endpoint is configured correctly.');
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('generateBtn').disabled = false;
+    }
+  }
+
+  function showError(message) {
+    const errorDiv = document.getElementById('error');
+    errorDiv.textContent = '❌ ' + message;
+    errorDiv.style.display = 'block';
+  }
+
+  // Prevent form submission without response
+  document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('crowd-form');
+
+    form.addEventListener('submit', function(e) {
+      const responseHidden = document.getElementById('responseHidden');
+      if (!responseHidden || !responseHidden.value) {
+        e.preventDefault();
+        showError('Please generate an AI response before submitting.');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return false;
+      }
+    });
+  });
+</script>

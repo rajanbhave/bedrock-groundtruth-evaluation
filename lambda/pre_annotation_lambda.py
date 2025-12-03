@@ -1,6 +1,6 @@
 """
-Pre-Annotation Lambda Function for SageMaker Ground Truth with Bedrock Integration
-This function invokes Amazon Bedrock models on-the-fly to generate responses
+Pre-Annotation Lambda Function for SageMaker Ground Truth with Bedrock Knowledge Base Integration
+This function uses Amazon Bedrock Knowledge Base with RAG to generate context-aware responses
 before presenting them to human workers for evaluation.
 """
 
@@ -16,12 +16,13 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # Initialize AWS clients
-bedrock_runtime = boto3.client('bedrock-runtime')
+bedrock_agent_runtime = boto3.client('bedrock-agent-runtime', region_name='us-east-1')
 s3_client = boto3.client('s3')
 
 # Environment variables with defaults
+KNOWLEDGE_BASE_ID = os.environ.get('KNOWLEDGE_BASE_ID')
 MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'anthropic.claude-3-sonnet-20240229-v1:0')
-MAX_TOKENS = int(os.environ.get('MAX_TOKENS', '1000'))
+MAX_TOKENS = int(os.environ.get('MAX_TOKENS', '2000'))
 TEMPERATURE = float(os.environ.get('TEMPERATURE', '0.7'))
 TOP_P = float(os.environ.get('TOP_P', '0.9'))
 ENABLE_CACHING = os.environ.get('ENABLE_CACHING', 'true').lower() == 'true'
@@ -29,6 +30,10 @@ CACHE_BUCKET = os.environ.get('CACHE_BUCKET', '')
 CACHE_PREFIX = os.environ.get('CACHE_PREFIX', 'bedrock-cache/')
 SYSTEM_PROMPT = os.environ.get('SYSTEM_PROMPT', '')
 MAX_RETRIES = int(os.environ.get('MAX_RETRIES', '3'))
+
+# Validate required configuration
+if not KNOWLEDGE_BASE_ID:
+    raise ValueError("KNOWLEDGE_BASE_ID environment variable is required")
 
 
 def lambda_handler(event, context):
@@ -130,7 +135,7 @@ def generate_response(question: str, category: str = '', prompt_id: str = '') ->
 
 def invoke_bedrock_with_retry(question: str, category: str = '', retries: int = 0) -> str:
     """
-    Invoke Bedrock model with retry logic for transient failures.
+    Invoke Bedrock Knowledge Base with RAG and retry logic for transient failures.
 
     Args:
         question: The user's question
@@ -138,7 +143,7 @@ def invoke_bedrock_with_retry(question: str, category: str = '', retries: int = 
         retries: Current retry attempt
 
     Returns:
-        Model response text
+        Model response text with UK pension knowledge context
     """
 
     try:
@@ -150,39 +155,52 @@ def invoke_bedrock_with_retry(question: str, category: str = '', retries: int = 
         if category:
             enhanced_question = f"[Category: {category}]\n\n{question}"
 
-        # Prepare the request body for Claude models
-        request_body = {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": MAX_TOKENS,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": enhanced_question
-                }
-            ],
-            "temperature": TEMPERATURE,
-            "top_p": TOP_P
-        }
-
-        # Add system prompt if provided
-        if system_prompt:
-            request_body["system"] = system_prompt
-
-        logger.info(f"Invoking Bedrock model: {MODEL_ID}")
+        logger.info(f"Querying Knowledge Base {KNOWLEDGE_BASE_ID} with model: {MODEL_ID}")
         start_time = time.time()
 
-        response = bedrock_runtime.invoke_model(
-            modelId=MODEL_ID,
-            body=json.dumps(request_body)
+        # Use Knowledge Base retrieve_and_generate for RAG
+        response = bedrock_agent_runtime.retrieve_and_generate(
+            input={
+                'text': enhanced_question
+            },
+            retrieveAndGenerateConfiguration={
+                'type': 'KNOWLEDGE_BASE',
+                'knowledgeBaseConfiguration': {
+                    'knowledgeBaseId': KNOWLEDGE_BASE_ID,
+                    'modelArn': f'arn:aws:bedrock:us-east-1::foundation-model/{MODEL_ID}',
+                    'generationConfiguration': {
+                        'promptTemplate': {
+                            'textPromptTemplate': f'{system_prompt}\n\nContext: $search_results$\n\nQuestion: $query$\n\nAnswer:'
+                        },
+                        'inferenceConfig': {
+                            'textInferenceConfig': {
+                                'maxTokens': MAX_TOKENS,
+                                'temperature': TEMPERATURE
+                            }
+                        }
+                    }
+                }
+            }
         )
 
         elapsed_time = time.time() - start_time
-        logger.info(f"Bedrock invocation completed in {elapsed_time:.2f} seconds")
+        logger.info(f"Knowledge Base retrieval completed in {elapsed_time:.2f} seconds")
 
-        response_body = json.loads(response['body'].read())
-        return response_body['content'][0]['text']
+        # Extract the generated text from Knowledge Base response
+        ai_response = response.get('output', {}).get('text', '')
 
-    except bedrock_runtime.exceptions.ThrottlingException as e:
+        if not ai_response:
+            logger.warning("No response text in Knowledge Base output")
+            return "Error: Knowledge Base returned empty response"
+
+        # Log citations/sources if available
+        citations = response.get('citations', [])
+        if citations:
+            logger.info(f"Response generated with {len(citations)} citation(s) from Knowledge Base")
+
+        return ai_response.strip()
+
+    except bedrock_agent_runtime.exceptions.ThrottlingException as e:
         # Rate limiting - retry with exponential backoff
         if retries < MAX_RETRIES:
             backoff_time = (2 ** retries) * 1
@@ -193,26 +211,15 @@ def invoke_bedrock_with_retry(question: str, category: str = '', retries: int = 
             logger.error(f"Max retries exceeded due to throttling")
             return f"Error: Service temporarily unavailable (throttled). Please try again later."
 
-    except bedrock_runtime.exceptions.ModelTimeoutException as e:
-        # Model timeout - retry
+    except Exception as e:
+        # General error handling
         if retries < MAX_RETRIES:
-            logger.warning(f"Model timeout. Retrying (attempt {retries + 1}/{MAX_RETRIES})")
+            logger.warning(f"Error during Knowledge Base query: {str(e)}. Retrying (attempt {retries + 1}/{MAX_RETRIES})")
+            time.sleep(2)
             return invoke_bedrock_with_retry(question, category, retries + 1)
         else:
-            logger.error(f"Max retries exceeded due to timeouts")
-            return f"Error: Model response timeout after {MAX_RETRIES} attempts."
-
-    except bedrock_runtime.exceptions.ValidationException as e:
-        # Validation error - don't retry
-        logger.error(f"Validation error invoking Bedrock: {str(e)}")
-        return f"Error: Invalid request to model. Please check the question format."
-
-    except Exception as e:
-        # Other errors - retry once
-        logger.error(f"Error invoking Bedrock: {str(e)}")
-        if retries < 1:  # Only retry once for unknown errors
-            return invoke_bedrock_with_retry(question, category, retries + 1)
-        return f"Error generating response: {str(e)}"
+            logger.error(f"Max retries exceeded. Error: {str(e)}", exc_info=True)
+            return f"Error: Failed to generate response from Knowledge Base after {MAX_RETRIES} attempts."
 
 
 def get_cached_response(question: str) -> Optional[str]:

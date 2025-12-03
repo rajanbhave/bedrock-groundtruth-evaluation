@@ -1,5 +1,7 @@
 {
   "description": "Configuration for Bedrock model invocation in Ground Truth pre-annotation Lambda",
+  "knowledge_base_id": "UGAJVE9OPE",
+  "knowledge_base_name": "uk-pension-knowledge-base-opensearch",
   "model_id": "anthropic.claude-3-sonnet-20240229-v1:0",
   "model_options": {
     "claude-3-opus": "anthropic.claude-3-opus-20240229-v1:0",
