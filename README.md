@@ -26,6 +26,7 @@ This solution enables structured human evaluation of AI-generated retirement pla
 
 - **Custom HTML UI** for rich evaluation experience with multiple rating dimensions
 - **Two evaluation modes**: Static (pre-defined) and Dynamic (worker-generated questions)
+- **Bedrock Knowledge Base Integration**: RAG-powered responses grounded in UK pension documentation
 - **Real-time and pre-generated response options** using Amazon Bedrock
 - **Pre/Post-annotation Lambda functions** for data processing and Aurora storage
 - **API Gateway integration** for dynamic real-time Bedrock invocation
@@ -33,9 +34,19 @@ This solution enables structured human evaluation of AI-generated retirement pla
 - **S3 caching** to optimize costs and reduce latency
 - **Comprehensive evaluation metrics** including quality ratings, compliance checks, and detailed feedback
 
+## 🧠 Knowledge Base Integration (RAG)
+
+Both evaluation versions use **Amazon Bedrock Knowledge Base** with Retrieval Augmented Generation (RAG):
+
+- **Knowledge Base**: Stores and indexes your UK pension documentation
+- **RAG Process**: Questions → KB retrieves relevant docs → Claude generates response using context
+- **Benefits**: More accurate, grounded responses based on your curated documentation
+- **Configuration**: Knowledge Base ID stored in `config/bedrock_config.json`
+- **Response Quality**: AI answers cite and reference official UK pension materials
+
 ## 🏗️ Architecture
 
-### Static Version Architecture (Pre-defined Questions)
+### Static Version Architecture (Pre-defined Questions + RAG)
 ```
 ┌─────────────────────────┐
 │  Static Manifest        │ (JSONL in S3)
@@ -49,16 +60,17 @@ This solution enables structured human evaluation of AI-generated retirement pla
 │  ┌────────────────────────────────────────────────────────┐  │
 │  │  Pre-Annotation Lambda                                 │  │
 │  │  • Receives question from manifest                     │  │
-│  │  • Invokes Bedrock API                                 │  │
-│  │  • S3 caching for duplicates                           │  │
-│  │  • Returns question + AI response to template          │  │
+│  │  • Queries Bedrock Knowledge Base (RAG)                │  │
+│  │  • KB retrieves relevant UK pension docs               │  │
+│  │  • Claude generates response with context              │  │
+│  │  • Returns question + KB-grounded response             │  │
 │  └──────────────┬─────────────────────────────────────────┘  │
 │                 │                                             │
 │                 ▼                                             │
 │  ┌────────────────────────────────────────────────────────┐  │
 │  │  Static HTML Template                                  │  │
 │  │  • Question already populated                          │  │
-│  │  • AI response already generated                       │  │
+│  │  • AI response with KB context displayed               │  │
 │  │  • Worker evaluates and rates                          │  │
 │  └──────────────┬─────────────────────────────────────────┘  │
 │                 │                                             │
@@ -69,13 +81,21 @@ This solution enables structured human evaluation of AI-generated retirement pla
 │  └──────────────┬─────────────────────────────────────────┘  │
 └─────────────────┼───────────────────────────────────────────┘
                   │
-         ┌────────┴────────┐
-         │                 │
-         ▼                 ▼
-  ┌─────────────┐   ┌────────────────┐
-  │   Bedrock   │   │    Aurora      │
-  │   Models    │   │  PostgreSQL    │
-  └─────────────┘   └────────────────┘
+         ┌────────┴─────────────────┐
+         │                          │
+         ▼                          ▼
+  ┌──────────────┐          ┌────────────────┐
+  │   Bedrock    │          │    Aurora      │
+  │ Knowledge    │◄────┐    │  PostgreSQL    │
+  │     Base     │     │    └────────────────┘
+  │   (RAG)      │     │
+  └──────────────┘     │
+         │             │
+         ▼             │
+  ┌──────────────┐     │
+  │   Claude 3   │─────┘
+  │   Sonnet     │
+  └──────────────┘
 ```
 
 ### Dynamic Version Architecture (Worker-generated Questions)
@@ -108,16 +128,17 @@ This solution enables structured human evaluation of AI-generated retirement pla
 │       ┌──────────────────────────────────────────────┐       │
 │       │   Bedrock API Lambda                         │       │
 │       │   • Validates question                       │       │
-│       │   • Checks S3 cache                          │       │
-│       │   • Invokes Bedrock (10-15s)                 │       │
-│       │   • Returns response + metadata              │       │
+│       │   • Queries Bedrock Knowledge Base (RAG)     │       │
+│       │   • KB retrieves UK pension docs             │       │
+│       │   • Claude generates response with context   │       │
+│       │   • Returns KB-grounded response + metadata  │       │
 │       └──────────────────┬───────────────────────────┘       │
 │                          │                                    │
 │                          │ JSON Response                      │
 │                          ▼                                    │
 │  ┌────────────────────────────────────────────────────────┐  │
 │  │  Dynamic HTML Template (continued)                     │  │
-│  │  4. Displays AI response                               │  │
+│  │  4. Displays AI response with KB context              │  │
 │  │  5. Worker evaluates and rates                         │  │
 │  │  6. Submits evaluation                                 │  │
 │  └──────────────┬─────────────────────────────────────────┘  │
@@ -129,13 +150,21 @@ This solution enables structured human evaluation of AI-generated retirement pla
 │  └──────────────┬─────────────────────────────────────────┘  │
 └─────────────────┼───────────────────────────────────────────┘
                   │
-         ┌────────┴────────┐
-         │                 │
-         ▼                 ▼
-  ┌─────────────┐   ┌────────────────┐
-  │   Bedrock   │   │    Aurora      │
-  │   Models    │   │  PostgreSQL    │
-  └─────────────┘   └────────────────┘
+         ┌────────┴─────────────────┐
+         │                          │
+         ▼                          ▼
+  ┌──────────────┐          ┌────────────────┐
+  │   Bedrock    │          │    Aurora      │
+  │ Knowledge    │◄────┐    │  PostgreSQL    │
+  │     Base     │     │    └────────────────┘
+  │   (RAG)      │     │
+  └──────────────┘     │
+         │             │
+         ▼             │
+  ┌──────────────┐     │
+  │   Claude 3   │─────┘
+  │   Sonnet     │
+  └──────────────┘
 ```
 
 ### Key Architectural Differences
@@ -217,12 +246,51 @@ bedrock-groundtruth-evaluation/
   - AWS Lambda
   - Amazon S3
   - Aurora PostgreSQL
-  - Amazon Bedrock (optional, for generating responses)
+  - **Amazon Bedrock Knowledge Base** (required for RAG)
+  - Amazon Bedrock (Claude 3 Sonnet model access)
 - AWS CLI configured with appropriate credentials
 - Python 3.9 or later
 - boto3 Python library
+- `jq` command-line JSON processor (for deployment scripts)
 
-### Step 1: Create S3 Bucket
+### Step 1: Configure Bedrock Knowledge Base
+
+**IMPORTANT**: Both evaluation versions require a Bedrock Knowledge Base for RAG.
+
+```bash
+# Configure your Knowledge Base ID in bedrock_config.json
+cd config
+```
+
+Edit `bedrock_config.json` and set your Knowledge Base ID:
+```json
+{
+  "knowledge_base_id": "YOUR-KB-ID-HERE",
+  "knowledge_base_name": "your-kb-name",
+  "model_id": "anthropic.claude-3-sonnet-20240229-v1:0",
+  ...
+}
+```
+
+**How to find your Knowledge Base ID:**
+```bash
+# List your Knowledge Bases
+aws bedrock-agent list-knowledge-bases --region us-east-1
+
+# Or in the AWS Console:
+# Navigate to Amazon Bedrock → Knowledge bases → Select your KB → Copy the ID
+```
+
+**Example Configuration:**
+```json
+{
+  "knowledge_base_id": "UGAJVE9OPE",
+  "knowledge_base_name": "uk-pension-knowledge-base-opensearch",
+  "model_id": "anthropic.claude-3-sonnet-20240229-v1:0"
+}
+```
+
+### Step 2: Create S3 Bucket
 
 ```bash
 # Create S3 bucket for Ground Truth data
@@ -362,7 +430,14 @@ aws iam put-role-policy \
 cd lambda
 ./package_lambda.sh
 
-# Create pre-annotation Lambda
+# Read Knowledge Base ID from config
+KB_ID=$(jq -r '.knowledge_base_id' ../config/bedrock_config.json)
+MODEL_ID=$(jq -r '.model_id' ../config/bedrock_config.json)
+
+echo "Using Knowledge Base ID: $KB_ID"
+echo "Using Model: $MODEL_ID"
+
+# Create pre-annotation Lambda with Knowledge Base configuration
 aws lambda create-function \
     --function-name groundtruth-pre-annotation-retirement-coach \
     --runtime python3.11 \
@@ -370,7 +445,8 @@ aws lambda create-function \
     --handler pre_annotation_lambda.lambda_handler \
     --zip-file fileb://pre-annotation-lambda.zip \
     --timeout 60 \
-    --memory-size 256
+    --memory-size 512 \
+    --environment Variables="{KNOWLEDGE_BASE_ID=${KB_ID},BEDROCK_MODEL_ID=${MODEL_ID},MAX_TOKENS=2000,TEMPERATURE=0.7}"
 
 # Create post-annotation Lambda
 aws lambda create-function \
@@ -391,6 +467,11 @@ export POST_LAMBDA_ARN=$(aws lambda get-function --function-name groundtruth-pos
 echo "Pre-annotation Lambda ARN: ${PRE_LAMBDA_ARN}"
 echo "Post-annotation Lambda ARN: ${POST_LAMBDA_ARN}"
 ```
+
+**Note**: The pre-annotation Lambda requires:
+- `KNOWLEDGE_BASE_ID`: Read from `bedrock_config.json`
+- `BEDROCK_MODEL_ID`: Model to use for generation
+- IAM permissions for `bedrock:RetrieveAndGenerate`
 
 ### Step 7: Create Private Workforce
 
@@ -456,17 +537,24 @@ aws sagemaker describe-labeling-job --labeling-job-name retirement-coach-static-
 
 ```bash
 # Deploy API Gateway + Lambda for dynamic Bedrock invocation
+# The script automatically reads Knowledge Base ID from config/bedrock_config.json
 ./config/setup_api_gateway_dynamic.sh
 
 # This script will:
-# 1. Create IAM role for Bedrock API Lambda
-# 2. Deploy bedrock-api-dynamic-evaluation Lambda
-# 3. Create API Gateway with CORS support
-# 4. Output the API Gateway endpoint URL
+# 1. Read Knowledge Base ID from bedrock_config.json
+# 2. Create IAM role with bedrock:RetrieveAndGenerate permissions
+# 3. Deploy bedrock-api-dynamic-evaluation Lambda with KB configuration
+# 4. Create API Gateway REST API with CORS support
+# 5. Output the API Gateway endpoint URL
 
 # Save the API endpoint URL shown at the end - you'll need it for the next step
 export API_ENDPOINT="<your-api-gateway-url>"  # Example: https://abc123.execute-api.us-east-1.amazonaws.com/prod/generate-response
 ```
+
+**Note**: The dynamic Lambda also uses Knowledge Base RAG:
+- Knowledge Base ID read from `config/bedrock_config.json`
+- IAM role includes `bedrock:RetrieveAndGenerate` permission
+- Responses grounded in your UK pension documentation
 
 ### Step 9-Dynamic: Update Template with API Endpoint
 
